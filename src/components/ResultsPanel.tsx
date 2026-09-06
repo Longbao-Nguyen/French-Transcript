@@ -150,7 +150,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
           <p className="text-[11.5px] text-slate-400">
             {isCompleted
               ? `Completed all ${totalSegments} segments (120 sec each)`
-              : `Processing ${Math.min(doneSegments + 1, totalSegments)} of ${totalSegments} segments (120 sec each)`}
+              : `Processed ${Math.min(doneSegments + 1, totalSegments)} / ${totalSegments} segments (120 sec each)`}
           </p>
         </div>
 
