@@ -1,0 +1,6 @@
+{
+  "name": "French Transcript Web App",
+  "description": "Chuyển đổi âm thanh và video thành transcript tiếng Pháp theo từng đoạn 120 giây với cập nhật thời gian thực, tính năng resume và tải kết quả.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
