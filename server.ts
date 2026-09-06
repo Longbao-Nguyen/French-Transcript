@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'path';
+import os from 'os';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 
@@ -19,7 +21,6 @@ interface SegmentResult {
 interface Job {
   id: string;
   fileName: string;
-  fileUrl?: string;
   totalDurationSec: number;
   segmentDurationSec: number;
   totalSegments: number;
@@ -33,7 +34,9 @@ interface Job {
 }
 
 const jobs = new Map<string, Job>();
+const uploadedAudioFiles = new Map<string, string>();
 const sseClients = new Map<string, express.Response[]>();
+const uploadDirectory = path.join(os.tmpdir(), 'french-transcript-web-app');
 
 function notifyClients(jobId: string, event: string, data: any) {
   const clients = sseClients.get(jobId);
@@ -93,52 +96,75 @@ async function startServer() {
     });
   });
 
-  // API: Upload / Create Job (both /api/upload and /upload for spec compatibility)
-  const handleUpload = (req: express.Request, res: express.Response) => {
-    const {
-      fileName = 'audio.mp3',
-      fileUrl,
-      durationSec = 1200,
-      resumeFrom = 0,
-      initialSegments = [],
-    } = req.body;
-
+  // API: receive the uploaded source file and create a job for the Colab worker.
+  const handleUpload = async (req: express.Request, res: express.Response) => {
+    const encodedFileName = req.header('X-File-Name') || 'audio';
+    const fileName = path.basename(decodeURIComponent(encodedFileName));
+    const durationSec = Number(req.header('X-Duration-Sec'));
+    const startSegment = Number(req.header('X-Start-Segment') || '1');
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ error: 'An audio or video file is required.' });
+      return;
+    }
+    if (!Number.isFinite(durationSec) || durationSec <= 0) {
+      res.status(400).json({ error: 'A valid media duration is required.' });
+      return;
+    }
     const jobId = 'job_' + Math.random().toString(36).substring(2, 9);
     const segDur = 120;
     const totalSegments = Math.max(1, Math.ceil(durationSec / segDur));
+    if (!Number.isInteger(startSegment) || startSegment < 1 || startSegment > totalSegments) {
+      res.status(400).json({ error: 'startSegment must be within the audio segment range.' });
+      return;
+    }
+    const extension = path.extname(fileName).replace(/[^.a-zA-Z0-9]/g, '');
+    const audioPath = path.join(uploadDirectory, `${jobId}${extension}`);
 
     const job: Job = {
       id: jobId,
       fileName,
-      fileUrl,
       totalDurationSec: durationSec,
       segmentDurationSec: segDur,
       totalSegments,
-      resumeFrom: Math.min(Math.max(0, resumeFrom), totalSegments - 1),
+      // Stored as a zero-based offset; the UI selects a one-based start segment.
+      resumeFrom: startSegment - 1,
       status: 'queued',
-      doneSegments: 0,
+      // Progress follows the source timeline, including deliberately skipped segments.
+      doneSegments: startSegment - 1,
       segments: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
 
-    // If pre-existing completed segments exist (e.g. from resume or initial upload)
-    if (Array.isArray(initialSegments) && initialSegments.length > 0) {
-      job.segments = initialSegments;
-      job.doneSegments = initialSegments.length;
+    try {
+      await fs.mkdir(uploadDirectory, { recursive: true });
+      await fs.writeFile(audioPath, req.body);
+      jobs.set(jobId, job);
+      uploadedAudioFiles.set(jobId, audioPath);
+      res.status(201).json({ job_id: jobId, job, message: 'File uploaded and job created.' });
+    } catch (error) {
+      res.status(500).json({ error: 'Could not store the uploaded file.' });
     }
-
-    jobs.set(jobId, job);
-
-    res.json({
-      job_id: jobId,
-      job,
-      message: 'Job created successfully',
-    });
   };
 
-  app.post('/api/upload', handleUpload);
-  app.post('/upload', handleUpload);
+  app.post('/api/upload', express.raw({ type: '*/*', limit: '1gb' }), handleUpload);
+
+  // The worker downloads only the file that was uploaded for its job; no remote URL is used.
+  app.get('/api/jobs/:id/audio', async (req, res) => {
+    const audioPath = uploadedAudioFiles.get(req.params.id);
+    const job = jobs.get(req.params.id);
+    if (!audioPath || !job) {
+      res.status(404).json({ error: 'Uploaded audio not found.' });
+      return;
+    }
+    try {
+      await fs.access(audioPath);
+      res.setHeader('X-File-Name', encodeURIComponent(job.fileName));
+      res.download(audioPath, job.fileName);
+    } catch {
+      res.status(404).json({ error: 'Uploaded audio has expired.' });
+    }
+  });
 
   // API: Get Job Status
   app.get('/api/jobs/:id', (req, res) => {
@@ -150,14 +176,70 @@ async function startServer() {
     res.json(job);
   });
 
+  // Set the exact 1-based segment at which the next Colab worker should start.
+  app.post('/api/jobs/:id/resume', (req, res) => {
+    const job = jobs.get(req.params.id);
+    const startSegment = Number(req.body?.startSegment);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    if (!Number.isInteger(startSegment) || startSegment < 1 || startSegment > job.totalSegments) {
+      res.status(400).json({ error: 'startSegment must be within the audio segment range.' });
+      return;
+    }
+
+    job.resumeFrom = startSegment - 1;
+    job.doneSegments = Math.max(job.doneSegments, job.resumeFrom);
+    job.status = 'queued';
+    job.updatedAt = Date.now();
+    notifyClients(job.id, 'resume', { startSegment, done: job.doneSegments, total: job.totalSegments });
+    res.json({ status: 'ok', job });
+  });
+
+  // The worker computes duration with pydub, which is the source of truth for the segment total.
+  app.post('/api/jobs/:id/progress', (req, res) => {
+    const job = jobs.get(req.params.id);
+    const { durationSec, totalSegments } = req.body;
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    const actualTotal = Number(totalSegments);
+    if (!Number.isInteger(actualTotal) || actualTotal < 1) {
+      res.status(400).json({ error: 'totalSegments must be a positive integer.' });
+      return;
+    }
+    job.totalSegments = actualTotal;
+    // Browser metadata may differ by one second from pydub. Keep the requested
+    // starting position inside the worker's authoritative segment range.
+    if (job.resumeFrom >= actualTotal) {
+      job.resumeFrom = actualTotal - 1;
+      job.doneSegments = Math.min(job.doneSegments, job.resumeFrom);
+    }
+    if (Number.isFinite(Number(durationSec)) && Number(durationSec) > 0) {
+      job.totalDurationSec = Number(durationSec);
+    }
+    job.updatedAt = Date.now();
+    notifyClients(job.id, 'progress', { total: job.totalSegments, durationSec: job.totalDurationSec });
+    res.json({ status: 'ok', totalSegments: job.totalSegments });
+  });
+
   // API: External Segment Upload (matches spec POST /segment)
   const handleSegmentUpload = (req: express.Request, res: express.Response) => {
-    const { job_id, index, text, startSec, endSec } = req.body;
+    const { job_id, index, text, startSec, endSec, totalSegments, durationSec } = req.body;
     const job = jobs.get(job_id);
 
     if (!job) {
       res.status(404).json({ error: 'Job not found' });
       return;
+    }
+
+    if (Number.isInteger(totalSegments) && totalSegments > 0) {
+      job.totalSegments = totalSegments;
+    }
+    if (typeof durationSec === 'number' && durationSec > 0) {
+      job.totalDurationSec = durationSec;
     }
 
     const sSec = typeof startSec === 'number' ? startSec : (index - 1) * 120;
@@ -184,7 +266,9 @@ async function startServer() {
       job.segments.sort((a, b) => a.index - b.index);
     }
 
-    job.doneSegments = job.segments.length;
+    // `index` is the source segment position. This permits starting at segment N
+    // without requiring placeholder results for segments 1 through N - 1.
+    job.doneSegments = Math.max(job.doneSegments, index);
     job.updatedAt = Date.now();
     job.status = job.doneSegments >= job.totalSegments ? 'completed' : 'processing';
 

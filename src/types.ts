@@ -12,7 +12,6 @@ export interface Job {
   id: string;
   fileName: string;
   fileSize?: string;
-  fileUrl?: string;
   totalDurationSec: number;
   segmentDurationSec: number; // 120
   totalSegments: number;
@@ -23,18 +22,4 @@ export interface Job {
   createdAt: number;
   updatedAt: number;
   error?: string;
-}
-
-export interface SampleAudio {
-  id: string;
-  title: string;
-  description: string;
-  durationSec: number;
-  segmentsCount: number;
-  url: string;
-  segments: {
-    startSec: number;
-    endSec: number;
-    text: string;
-  }[];
 }

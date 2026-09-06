@@ -1,39 +1,28 @@
 import React, { useRef, useState } from 'react';
-import { Upload, Cloud, FileAudio, Check, AlertCircle, Play, Pause, RotateCcw } from 'lucide-react';
+import { Upload, Cloud, FileAudio } from 'lucide-react';
 
 interface UploadPanelProps {
   selectedFile: File | null;
-  fileUrl: string;
   onFileSelect: (file: File) => void;
-  onUrlChange: (url: string) => void;
-  onSubmitUrl: () => void;
   onStartUpload: () => void;
+  activeJobId?: string;
   isProcessing: boolean;
-  resumeFrom: number;
-  onResumeFromChange: (val: number) => void;
   totalSegments: number;
-  doneSegments: number;
-  onPauseResume?: () => void;
-  onReset?: () => void;
+  startSegment: number;
+  onStartSegmentChange: (value: number) => void;
 }
 
 export const UploadPanel: React.FC<UploadPanelProps> = ({
   selectedFile,
-  fileUrl,
   onFileSelect,
-  onUrlChange,
-  onSubmitUrl,
   onStartUpload,
+  activeJobId,
   isProcessing,
-  resumeFrom,
-  onResumeFromChange,
   totalSegments,
-  doneSegments,
-  onPauseResume,
-  onReset,
+  startSegment,
+  onStartSegmentChange,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showAdvancedResume, setShowAdvancedResume] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -73,7 +62,7 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({
           </div>
           {selectedFile && (
             <span className="text-xs bg-emerald-50 text-emerald-700 font-medium px-2 py-0.5 rounded-full border border-emerald-200">
-              Đã chọn file
+               File selected
             </span>
           )}
         </div>
@@ -121,11 +110,33 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({
           )}
         </div>
 
-        {/* Main Upload Button */}
+        {(selectedFile || activeJobId) && totalSegments > 0 && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <label htmlFor="input-start-segment" className="block text-xs font-semibold text-slate-600 mb-2">
+              Start transcript from segment:
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="input-start-segment"
+                type="number"
+                min={1}
+                max={totalSegments}
+                value={startSegment}
+                onChange={(event) => onStartSegmentChange(Number.parseInt(event.target.value, 10) || 1)}
+                className="w-16 px-2 py-1.5 rounded-md border border-slate-200 text-center text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+              />
+              <span className="text-xs text-slate-400">/ {totalSegments}</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              Worker will run from segment {startSegment} to the end and skip all previous segments.
+            </p>
+          </div>
+        )}
+
         <button
           id="btn-upload"
           onClick={onStartUpload}
-          disabled={isProcessing && doneSegments < totalSegments}
+          disabled={(!selectedFile && !activeJobId) || totalSegments < 1}
           className={`w-full mt-4 py-3 px-4 rounded-lg font-semibold text-white shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
             isProcessing
               ? 'bg-blue-700/80 hover:bg-blue-700'
@@ -133,90 +144,8 @@ export const UploadPanel: React.FC<UploadPanelProps> = ({
           }`}
         >
           <Upload className="w-4 h-4 stroke-[2.5]" />
-          <span>{isProcessing ? 'PROCESSING TRANSCRIPTION...' : 'UPLOAD'}</span>
+          <span>{activeJobId ? 'START / RESUME TRANSCRIPT' : 'START TRANSCRIPT'}</span>
         </button>
-
-        {/* Paste URL Section */}
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <label
-            htmlFor="input-url"
-            className="block text-slate-700 font-bold text-sm mb-2"
-          >
-            Paste URL
-          </label>
-          <input
-            id="input-url"
-            type="text"
-            value={fileUrl}
-            onChange={(e) => onUrlChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                onSubmitUrl();
-              }
-            }}
-            placeholder="https://example.com/your-file.mp4"
-            className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-slate-800 text-sm placeholder:text-slate-400 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
-          />
-
-          <button
-            id="btn-url-ok"
-            onClick={onSubmitUrl}
-            disabled={isProcessing}
-            className="w-full mt-3 py-2.5 px-4 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.99] shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            OK
-          </button>
-        </div>
-      </div>
-
-      {/* Resume Feature Section (From Design Spec) */}
-      <div className="mt-5 pt-4 border-t border-slate-100">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-600">
-            Resume from segment:
-          </span>
-          <div className="flex items-center gap-2">
-            <input
-              id="input-resume-from"
-              type="number"
-              min={0}
-              max={Math.max(0, totalSegments - 1)}
-              value={resumeFrom}
-              onChange={(e) => onResumeFromChange(parseInt(e.target.value) || 0)}
-              disabled={isProcessing}
-              className="w-16 px-2 py-1 rounded-md border border-slate-200 text-center text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-            />
-            <span className="text-xs text-slate-400">
-              / {Math.max(1, totalSegments)}
-            </span>
-          </div>
-        </div>
-        <p className="text-[11px] text-slate-400 mt-1">
-          Mặc định 0. Nếu bị gián đoạn ở đoạn 8, nhập 8 để chỉ xử lý các đoạn còn lại (8 - {Math.max(1, totalSegments)}).
-        </p>
-
-        {isProcessing && onPauseResume && (
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              id="btn-pause-resume"
-              onClick={onPauseResume}
-              className="flex-1 py-1.5 px-3 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Pause className="w-3.5 h-3.5" />
-              <span>Tạm dừng</span>
-            </button>
-            {onReset && (
-              <button
-                id="btn-reset"
-                onClick={onReset}
-                className="py-1.5 px-3 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium flex items-center justify-center gap-1 transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset</span>
-              </button>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

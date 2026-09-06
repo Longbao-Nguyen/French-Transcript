@@ -58,18 +58,18 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
             <button
               id="btn-copy-transcript"
               onClick={handleCopy}
-              title="Copy-safe Recovery: Sao chép toàn bộ kết quả đã hoàn thành"
+              title="Copy-safe Recovery: Copy all completed results"
               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200/80 rounded-md transition-colors cursor-pointer"
             >
               {copied ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-700 font-semibold">Đã sao chép</span>
+                  <span className="text-emerald-700 font-semibold">Copied</span>
                 </>
               ) : (
                 <>
                   <Copy className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Sao chép</span>
+                  <span>Copy</span>
                 </>
               )}
             </button>
@@ -90,10 +90,10 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
             <div className="flex flex-col items-center justify-center h-[260px] text-center text-slate-400">
               <FileText className="w-10 h-10 text-slate-200 mb-2 stroke-1" />
               <p className="text-sm font-medium text-slate-500">
-                Chưa có dữ liệu transcript
+                No transcript data available
               </p>
               <p className="text-xs text-slate-400 max-w-[260px] mt-1">
-                Tải lên file hoặc dán URL và bấm UPLOAD để bắt đầu nhận dạng từng đoạn 120s.
+                Upload an audio file and click UPLOAD to start transcribing.
               </p>
             </div>
           ) : (
@@ -118,7 +118,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                   <div className="flex items-center gap-2 text-xs font-medium text-blue-600 animate-pulse">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
                     <span>
-                      Đang xử lý đoạn {doneSegments + 1} / {totalSegments} (Whisper Large v3)...
+                      Processing segment {Math.min(doneSegments + 1, totalSegments)} / {totalSegments} (Whisper Large v3)...
                     </span>
                   </div>
                 </div>
@@ -149,7 +149,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
           </div>
           <p className="text-[11.5px] text-slate-400">
             {isCompleted
-              ? `Hoàn tất tất cả ${totalSegments} đoạn (120 giây mỗi đoạn)`
+              ? `Completed all ${totalSegments} segments (120 sec each)`
               : `Processing ${Math.min(doneSegments + 1, totalSegments)} of ${totalSegments} segments (120 sec each)`}
           </p>
         </div>

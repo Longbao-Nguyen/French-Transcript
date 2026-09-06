@@ -1,15 +1,13 @@
 import React from 'react';
-import { Headphones, Terminal, Sparkles, RefreshCw } from 'lucide-react';
+import { Headphones, Terminal } from 'lucide-react';
 
 interface HeaderProps {
-  onLoadSample: () => void;
   onOpenColabGuide: () => void;
   isProcessing: boolean;
   statusText?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onLoadSample,
   onOpenColabGuide,
   isProcessing,
   statusText,
@@ -31,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Hệ thống chuyển đổi âm thanh sang văn bản tiếng Pháp theo từng đoạn 120s
+              Convert audio into French transcripts
             </p>
           </div>
         </div>
@@ -43,17 +41,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{statusText}</span>
             </div>
           )}
-
-          <button
-            id="btn-load-sample"
-            onClick={onLoadSample}
-            disabled={isProcessing}
-            title="Tải bài giảng mẫu 20 phút (10 đoạn 120s) để thử nghiệm ngay"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100/80 border border-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Nạp bài giảng mẫu (10 đoạn)</span>
-          </button>
 
           <button
             id="btn-colab-guide"

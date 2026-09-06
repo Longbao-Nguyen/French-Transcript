@@ -30,11 +30,12 @@ import os
 import time
 import torch
 import requests
+from urllib.parse import unquote
 from pydub import AudioSegment
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
 SERVER_URL = "${currentHost}"
-JOB_ID = "${activeJobId || 'job_demo'}"
+JOB_ID = "${activeJobId || 'UPLOAD_A_FILE_FIRST'}"
 SEGMENT_DURATION_MS = 120 * 1000
 
 print(f"Connecting to Server: {SERVER_URL} for Job: {JOB_ID}")
@@ -60,22 +61,40 @@ pipe = pipeline(
     torch_dtype=torch_dtype,
     device=device,
     chunk_length_s=30,
-    max_new_tokens=128,
-    generate_kwargs={"language": "french"}
+    # Use Whisper's default decoding budget; the previous 128-token cap truncated speech.
+    generate_kwargs={"language": "french", "task": "transcribe"}
 )
 
 print(f"Model loaded successfully on {device}!")
 
-# 2. Worker Processing Loop
+# 2. Download the exact file uploaded in the web app (no URL input)
+if JOB_ID == "UPLOAD_A_FILE_FIRST":
+    raise ValueError("Upload a file in the web app first, then reopen this guide.")
+
+audio_response = requests.get(f"{SERVER_URL}/api/jobs/{JOB_ID}/audio", timeout=600)
+audio_response.raise_for_status()
+uploaded_name = unquote(audio_response.headers.get("X-File-Name", "uploaded_audio"))
+INPUT_AUDIO_PATH = "uploaded_audio" + os.path.splitext(uploaded_name)[1]
+with open(INPUT_AUDIO_PATH, "wb") as audio_file:
+    audio_file.write(audio_response.content)
+
+# 3. Worker Processing Loop
 def process_and_stream(audio_path):
     audio = AudioSegment.from_file(audio_path).set_channels(1)
     audio_len_ms = len(audio)
     total_segments = (audio_len_ms + SEGMENT_DURATION_MS - 1) // SEGMENT_DURATION_MS
-    
+
     print(f"Audio total duration: {audio_len_ms/1000}s, Total segments: {total_segments}")
-    
-    seg_idx = 1
-    for start_ms in range(0, audio_len_ms, SEGMENT_DURATION_MS):
+    requests.post(f"{SERVER_URL}/api/jobs/{JOB_ID}/progress", json={
+        "durationSec": audio_len_ms / 1000,
+        "totalSegments": total_segments
+    }).raise_for_status()
+
+    # resumeFrom is a zero-based number of source segments to skip.
+    job = requests.get(f"{SERVER_URL}/api/jobs/{JOB_ID}", timeout=30).json()
+    resume_from = max(0, min(int(job.get("resumeFrom", 0)), total_segments - 1))
+    seg_idx = resume_from + 1
+    for start_ms in range(resume_from * SEGMENT_DURATION_MS, audio_len_ms, SEGMENT_DURATION_MS):
         end_ms = min(start_ms + SEGMENT_DURATION_MS, audio_len_ms)
         chunk = audio[start_ms:end_ms]
         
@@ -91,8 +110,10 @@ def process_and_stream(audio_path):
             "index": seg_idx,
             "text": text,
             "startSec": start_ms // 1000,
-            "endSec": end_ms // 1000
-        })
+            "endSec": end_ms // 1000,
+            "durationSec": audio_len_ms / 1000,
+            "totalSegments": total_segments
+        }).raise_for_status()
         
         print(f"Processed & streamed segment {seg_idx}/{total_segments}")
         if os.path.exists(temp_wav):
@@ -100,7 +121,7 @@ def process_and_stream(audio_path):
         seg_idx += 1
         torch.cuda.empty_cache()
 
-# process_and_stream("audio.wav")
+process_and_stream(INPUT_AUDIO_PATH)
 `;
 
   const handleCopy = () => {
@@ -120,10 +141,10 @@ def process_and_stream(audio_path):
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-800">
-                Kiến trúc Colab GPU Worker (Whisper Large v3)
+                Colab GPU Worker (Whisper Large v3)
               </h3>
               <p className="text-xs text-slate-500">
-                Mã nguồn Python chạy trên Google Colab T4 miễn phí theo tài liệu kiến trúc
+                Python source code run on free Google Colab T4 GPU
               </p>
             </div>
           </div>
@@ -138,23 +159,22 @@ def process_and_stream(audio_path):
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-600">
           <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4 text-blue-900 leading-relaxed">
-            <p className="font-semibold mb-1">💡 Nguyên lý hoạt động theo tài liệu thiết kế:</p>
+            <p className="font-semibold mb-1">💡 Operating principle:</p>
             <p>
-              Trình duyệt gửi audio/URL lên server để tạo Job. Google Colab (với GPU T4 miễn phí)
-              chạy tiến trình nền nhận dạng từng đoạn <strong>120 giây</strong> bằng mô hình{' '}
+              The browser uploads the file to the server to create a Job. Google Colab (using a free T4 GPU) runs a background process to recognize each <strong>120-second segment</strong> using the{' '}
               <code className="bg-blue-100/80 px-1 py-0.5 rounded text-blue-800 font-mono">
                 bofenghuang/whisper-large-v3-french
               </code>
-              , sau đó bắn kết quả về server qua endpoint{' '}
+              model, then sends the results back to the server via the {' '}
               <code className="bg-blue-100/80 px-1 py-0.5 rounded text-blue-800 font-mono">
                 POST /api/segment
               </code>
-              . Server sẽ truyền dữ liệu trực tiếp về bảng <strong>RESULTS</strong> qua Server-Sent Events (SSE).
+              endpoint. The server streams the data directly to the <strong>RESULTS</strong> via Server-Sent Events (SSE).
             </p>
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <span className="font-semibold text-slate-700">Mã nguồn Colab Worker (Python):</span>
+            <span className="font-semibold text-slate-700">Colab Worker Source code (Python):</span>
             <button
               onClick={handleCopy}
               className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-md text-xs transition-colors cursor-pointer"
@@ -162,12 +182,12 @@ def process_and_stream(audio_path):
               {copied ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Đã sao chép</span>
+                  <span>Copied</span>
                 </>
               ) : (
                 <>
                   <Copy className="w-3.5 h-3.5" />
-                  <span>Sao chép code Python</span>
+                  <span>Copy Python Code</span>
                 </>
               )}
             </button>
@@ -175,21 +195,6 @@ def process_and_stream(audio_path):
 
           <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 font-mono text-[11px] leading-relaxed p-4 text-slate-200 max-h-[300px] overflow-y-auto">
             <pre>{workerPythonCode}</pre>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
-            <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-              <div className="font-semibold text-slate-800 mb-1">Mô phỏng tức thì (Demo mode)</div>
-              <p className="text-slate-500">
-                Web app đã tích hợp sẵn luồng mô phỏng và bài giảng thực tế tiếng Pháp để sinh viên kiểm thử ngay không cần bật Colab.
-              </p>
-            </div>
-            <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-              <div className="font-semibold text-slate-800 mb-1">Copy-safe & Resume</div>
-              <p className="text-slate-500">
-                Nếu máy tính bị sleep hoặc mất mạng, tiến độ vẫn được lưu lại, bạn có thể copy hoặc resume từ đoạn mong muốn.
-              </p>
-            </div>
           </div>
         </div>
 
@@ -201,7 +206,7 @@ def process_and_stream(audio_path):
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
           >
-            <span>Mở Google Colab</span>
+            <span>Open Google Colab</span>
             <ExternalLink className="w-3 h-3" />
           </a>
 
