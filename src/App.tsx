@@ -29,6 +29,9 @@ export default function App() {
   const [segments, setSegments] = useState<SegmentResult[]>([]);
   const [durationSec, setDurationSec] = useState<number>();
   const eventSourceRef = useRef<EventSource | null>(null);
+  const segmentsRef = useRef<SegmentResult[]>([]);
+  const selectedFileRef = useRef<File | null>(null);
+  const autoDownloadedJobIdsRef = useRef(new Set<string>());
 
   const closeEventSource = () => {
     eventSourceRef.current?.close();
@@ -38,10 +41,27 @@ export default function App() {
   useEffect(() => closeEventSource, []);
 
   const addOrReplaceSegment = (segment: SegmentResult) => {
-    setSegments((previous) => {
-      const withoutCurrent = previous.filter((item) => item.index !== segment.index);
-      return [...withoutCurrent, segment].sort((a, b) => a.index - b.index);
-    });
+    const withoutCurrent = segmentsRef.current.filter((item) => item.index !== segment.index);
+    const updatedSegments = [...withoutCurrent, segment].sort((a, b) => a.index - b.index);
+    segmentsRef.current = updatedSegments;
+    setSegments(updatedSegments);
+  };
+
+  const downloadTranscript = () => {
+    const file = selectedFileRef.current;
+    if (!file || segmentsRef.current.length === 0) return false;
+
+    const textContent = exportToColabTxt(segmentsRef.current, file.name);
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `transcript_${file.name.replace(/\.[^/.]+$/, '')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    return true;
   };
 
   const connectToJob = (jobId: string) => {
@@ -54,7 +74,8 @@ export default function App() {
       setTotalSegments(job.totalSegments);
       setDoneSegments(job.doneSegments);
       setStartSegment(Math.min(job.doneSegments + 1, job.totalSegments));
-      setSegments(job.segments ?? []);
+      segmentsRef.current = job.segments ?? [];
+      setSegments(segmentsRef.current);
     });
 
     eventSource.addEventListener('progress', (event) => {
@@ -70,7 +91,7 @@ export default function App() {
       setTotalSegments(data.total);
       setStartSegment(Math.min(data.done + 1, data.total));
       setIsProcessing(true);
-      setStatusMessage(`Processing segment ${data.done} / ${data.total}.`);
+      setStatusMessage(`Processed segment ${data.done} / ${data.total}.`);
     });
 
     eventSource.addEventListener('complete', (event) => {
@@ -79,6 +100,11 @@ export default function App() {
       setTotalSegments(data.totalSegments);
       setIsProcessing(false);
       setStatusMessage(`Processing complete: ${data.doneSegments} / ${data.totalSegments} segments.`);
+      if (!autoDownloadedJobIdsRef.current.has(jobId)) {
+        autoDownloadedJobIdsRef.current.add(jobId);
+        // Wait until the final segment event has updated the transcript ref.
+        window.setTimeout(() => downloadTranscript(), 0);
+      }
       eventSource.close();
     });
   };
@@ -86,12 +112,14 @@ export default function App() {
   const handleFileSelect = (file: File) => {
     closeEventSource();
     setSelectedFile(file);
+    selectedFileRef.current = file;
     setActiveJobId(undefined);
     setDurationSec(undefined);
     setTotalSegments(0);
     setDoneSegments(0);
     setStartSegment(1);
     setSegments([]);
+    segmentsRef.current = [];
     setIsProcessing(false);
     setStatusMessage(`Reading duration: ${file.name}`);
 
@@ -145,6 +173,7 @@ export default function App() {
 
     closeEventSource();
     setSegments([]);
+    segmentsRef.current = [];
     setDoneSegments(0);
     setIsProcessing(true);
     setStatusMessage('Uploading file to server…');
@@ -176,17 +205,7 @@ export default function App() {
   };
 
   const handleDownload = () => {
-    if (!selectedFile || segments.length === 0) return;
-    const textContent = exportToColabTxt(segments, selectedFile.name);
-    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `transcript_${selectedFile.name.replace(/\.[^/.]+$/, '')}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadTranscript();
   };
 
   return (
