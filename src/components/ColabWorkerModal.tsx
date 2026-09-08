@@ -24,19 +24,21 @@ export const ColabWorkerModal: React.FC<ColabWorkerModalProps> = ({
 # Segment Duration: 120s (2 minutes)
 # =====================================================================
 
-!pip install -q transformers datasets torch torchaudio pydub requests accelerate
+!pip install -q transformers datasets pydub requests accelerate
 
 import os
 import time
 import torch
 import requests
+import numpy as np
 from urllib.parse import unquote
 from pydub import AudioSegment
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
-SERVER_URL = "${currentHost}"
-JOB_ID = "${activeJobId || 'UPLOAD_A_FILE_FIRST'}"
+SERVER_URL = "https://french-transcript.onrender.com"
+JOB_ID = "job_csz7bvv"
 SEGMENT_DURATION_MS = 120 * 1000
+BATCH_SIZE = 4
 
 print(f"Connecting to Server: {SERVER_URL} for Job: {JOB_ID}")
 
@@ -48,7 +50,7 @@ model_id = "bofenghuang/whisper-large-v3-french"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
     model_id,
-    torch_dtype=torch_dtype,
+    dtype=torch_dtype,
     low_cpu_mem_usage=True,
     use_safetensors=True
 ).to(device)
@@ -58,7 +60,7 @@ pipe = pipeline(
     model=model,
     feature_extractor=processor.feature_extractor,
     tokenizer=processor.tokenizer,
-    torch_dtype=torch_dtype,
+    dtype=torch_dtype,
     device=device,
     chunk_length_s=30,
     # Use Whisper's default decoding budget; the previous 128-token cap truncated speech.
@@ -85,41 +87,63 @@ def process_and_stream(audio_path):
     total_segments = (audio_len_ms + SEGMENT_DURATION_MS - 1) // SEGMENT_DURATION_MS
 
     print(f"Audio total duration: {audio_len_ms/1000}s, Total segments: {total_segments}")
-    requests.post(f"{SERVER_URL}/api/jobs/{JOB_ID}/progress", json={
-        "durationSec": audio_len_ms / 1000,
-        "totalSegments": total_segments
-    }).raise_for_status()
 
-    # resumeFrom is a zero-based number of source segments to skip.
+    requests.post(
+        f"{SERVER_URL}/api/jobs/{JOB_ID}/progress",
+        json={
+            "durationSec": audio_len_ms / 1000,
+            "totalSegments": total_segments,
+        },
+    ).raise_for_status()
+
+    # Resume support
     job = requests.get(f"{SERVER_URL}/api/jobs/{JOB_ID}", timeout=30).json()
     resume_from = max(0, min(int(job.get("resumeFrom", 0)), total_segments - 1))
-    seg_idx = resume_from + 1
-    for start_ms in range(resume_from * SEGMENT_DURATION_MS, audio_len_ms, SEGMENT_DURATION_MS):
+
+    batch_audio = []
+    batch_meta = []
+
+    for seg_idx, start_ms in enumerate(
+        range(resume_from * SEGMENT_DURATION_MS, audio_len_ms, SEGMENT_DURATION_MS),
+        start=resume_from + 1,
+    ):
         end_ms = min(start_ms + SEGMENT_DURATION_MS, audio_len_ms)
         chunk = audio[start_ms:end_ms]
-        
-        temp_wav = f"segment_{seg_idx}.wav"
-        chunk.export(temp_wav, format="wav")
-        
-        result = pipe(temp_wav)
-        text = result["text"].strip()
-        
-        # Stream segment back to Web App
-        requests.post(f"{SERVER_URL}/api/segment", json={
-            "job_id": JOB_ID,
-            "index": seg_idx,
-            "text": text,
-            "startSec": start_ms // 1000,
-            "endSec": end_ms // 1000,
-            "durationSec": audio_len_ms / 1000,
-            "totalSegments": total_segments
-        }).raise_for_status()
-        
-        print(f"Processed & streamed segment {seg_idx}/{total_segments}")
-        if os.path.exists(temp_wav):
-            os.remove(temp_wav)
-        seg_idx += 1
-        torch.cuda.empty_cache()
+
+        # Convert to NumPy
+        samples = np.array(chunk.get_array_of_samples(), dtype=np.float32)
+        samples /= 32768.0
+
+        batch_audio.append({
+            "array": samples,
+            "sampling_rate": chunk.frame_rate,
+        })
+        batch_meta.append((seg_idx, start_ms, end_ms))
+
+        if len(batch_audio) == BATCH_SIZE or seg_idx == total_segments:
+
+            results = pipe(batch_audio, batch_size=BATCH_SIZE)
+
+            for result, (idx, s_ms, e_ms) in zip(results, batch_meta):
+                text = result["text"].strip()
+
+                requests.post(
+                    f"{SERVER_URL}/api/segment",
+                    json={
+                        "job_id": JOB_ID,
+                        "index": idx,
+                        "text": text,
+                        "startSec": s_ms // 1000,
+                        "endSec": e_ms // 1000,
+                        "durationSec": audio_len_ms / 1000,
+                        "totalSegments": total_segments,
+                    },
+                ).raise_for_status()
+
+                print(f"Processed & streamed segment {idx}/{total_segments}")
+
+            batch_audio.clear()
+            batch_meta.clear()
 
 process_and_stream(INPUT_AUDIO_PATH)
 `;
