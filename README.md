@@ -23,6 +23,8 @@ Link: https://french-transcript.onrender.com/
 2. Switch to another Google account that still has Google Colab GPU available.
 3. Follow the Basic Usage steps again, but set "Start transcript from segment" to the last completed segment before the interruption.
 
+!! If "CUDA error: out of memory" at the start, go to Runtime -> Disconnect and delete runtime and retry.
+
 
 ## Notes
 
