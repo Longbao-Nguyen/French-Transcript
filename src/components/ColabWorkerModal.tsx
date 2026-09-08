@@ -35,8 +35,8 @@ from urllib.parse import unquote
 from pydub import AudioSegment
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
-SERVER_URL = "https://french-transcript.onrender.com"
-JOB_ID = "job_csz7bvv"
+SERVER_URL = "${currentHost}"
+JOB_ID = "${activeJobId || 'UPLOAD_A_FILE_FIRST'}"
 SEGMENT_DURATION_MS = 120 * 1000
 BATCH_SIZE = 4
 
