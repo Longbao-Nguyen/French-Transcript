@@ -288,7 +288,7 @@ Completed: 1 - 7
 Start from: 8
 ```
 
-Only segments 9, 10, 11, 12 are processed.
+Only segments 8, 9, 10, 11, 12 are processed.
 
 ------------------------------------------------------------------------
 
