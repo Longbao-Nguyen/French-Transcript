@@ -1,34 +1,6 @@
 # French Transcript Web App
 
-> **Production-oriented Design Specification (v2.0)**
->
-> A GitHub-style technical README for transforming a Google Colab
-> transcription notebook into a resilient web application with free-tier
-> infrastructure.
-
-------------------------------------------------------------------------
-
-## Table of Contents
-
-1.  Project Overview
-2.  Problem Statement
-3.  Current Notebook Status
-4.  Design Goals
-5.  System Architecture
-6.  User Workflow
-7.  UI Specification
-8.  Backend Design
-9.  Worker Design
-10. Temporary Storage Strategy
-11. Job Lifecycle
-12. API Design
-13. Failure Recovery
-14. Multi-user Handling
-15. Edge Cases
-16. Deployment
-17. Repository Structure
-18. Roadmap
-19. Future Improvements
+> **Production-oriented Design Specification (v1.0)**
 
 ------------------------------------------------------------------------
 
@@ -58,20 +30,16 @@ several usability limitations.
 ## Current Workflow
 
 1.  Open Colab.
-2.  Upload file.
-3.  Run notebook.
-4.  Wait.
-5.  Download transcript.
+2.  Upload file to Drive.
+3.  Copy file's link
+4.  Run notebook.
+6.  Download transcript.
 
 ## Current Problems
 
-  Problem                         Impact
-  ------------------------------- -----------------------------------
-  Internet disconnect             Lose progress
-  Laptop sleeps                   Notebook disconnects
-  Browser closed                  Session interrupted
-  Must rerun completed segments   Time wasted
-  Colab UI                        Difficult for non-technical users
+- Colab runtime disconnections cause complete progress loss, forcing jobs to restart from scratch.
+- Requiring manual uploads to Google Drive creates an unnecessary intermediate bottleneck and wastes time.
+- Manually parsing and pasting Google Drive file IDs is error-prone, cumbersome, and provides a poor user experience (UX).
 
 ------------------------------------------------------------------------
 
@@ -93,6 +61,11 @@ The current notebook already provides the core ML pipeline.
 -   Queue.
 -   Browser-independent execution.
 -   Friendly UI.
+
+### Pipeline's Problems
+
+- Processing segments sequentially in a loop underutilizes GPU compute and fails to leverage batching.
+- Aggressively clearing cache after every segment introduces allocation overhead and prevents KV/memory cache reuse.
 
 ------------------------------------------------------------------------
 
@@ -161,21 +134,6 @@ B --> A
 
 ------------------------------------------------------------------------
 
-# Why this Architecture?
-
-Instead of allowing users to directly execute Colab notebooks, Colab
-becomes a **GPU worker**.
-
-Benefits:
-
--   User browser can disconnect.
--   Browser only displays progress.
--   Server coordinates jobs.
--   Worker performs computation.
--   Temporary files survive server restarts.
-
-------------------------------------------------------------------------
-
 # Component Responsibilities
 
 ## Browser
@@ -184,7 +142,7 @@ Responsibilities:
 
 -   Upload
 -   Progress
--   Realtime transcript
+-   Realtime update for transcripts
 -   Download
 
 No AI computation occurs here.
@@ -235,14 +193,6 @@ Stores:
 -   segment transcripts
 -   final txt
 
-TTL example:
-
-  File        Lifetime
-  ----------- ----------
-  Audio       24h
-  Segments    24h
-  Final txt   24h
-
 ------------------------------------------------------------------------
 
 # User Workflow
@@ -273,48 +223,16 @@ Backend->>User: Enable Download
 
 ------------------------------------------------------------------------
 
-# UI Specification
-
-The interface consists of two panels.
-
-## Layout
-
-``` text
-+----------------------+----------------------+
-
-| Upload | Results |
-
-| | |
-
-| Drop Zone | Transcript |
-
-| Upload | Scroll |
-
-| Resume | |
-
-| OK | Progress |
-
-| | Download |
-
-+----------------------+----------------------+
-```
-
-------------------------------------------------------------------------
-
 ## Upload Panel
 
 ### Components
 
 -   Drag-and-drop
 -   Upload button
--   Resume from
+-   Start from
 -   OK
 
-Resume from defaults to:
-
-``` text
-0
-```
+Start from defaults to 1
 
 ------------------------------------------------------------------------
 
@@ -353,54 +271,24 @@ Why SSE?
 Flow:
 
 ``` text
-Worker
-
-↓
-
-POST /segment
-
-↓
-
-Backend
-
-↓
-
-SSE
-
-↓
-
-Browser
+Worker -> POST /segment ->Backend -> SSE -> Browser
 ```
 
 ------------------------------------------------------------------------
 
-# Resume Feature
-
-One of the most valuable features.
+# Resume Feature (Start from)
 
 Example:
 
 ``` text
 12 segments
 
-Completed: 8
+Completed: 1 - 7
 
-Resume from: 8
+Start from: 8
 ```
 
-Only segments:
-
-``` text
-8
-
-9
-
-10
-
-11
-```
-
-are processed.
+Only segments 9, 10, 11, 12 are processed.
 
 ------------------------------------------------------------------------
 
@@ -412,8 +300,8 @@ Example JSON
 {
   "job_id": "abc123",
   "status": "processing",
-  "resume_from": 8,
-  "done_segments": 8,
+  "start_from": 8,
+  "done_segments": 7,
   "total_segments": 12
 }
 ```
@@ -445,24 +333,16 @@ Example:
 ``` text
 12 segments
 
-completed: 8
+completed: 7
 
 worker stopped
 ```
 
 User sees:
 
--   transcript 1-8
--   progress 8/12
--   Resume from 8
-
-Nothing is lost.
-
-------------------------------------------------------------------------
-
-# Copy-safe Recovery
-
-Even if the worker disappears:
+-   transcript 1-7
+-   progress 7/12
+-   Start from 8
 
 User can:
 
@@ -477,40 +357,17 @@ This prevents wasting already-completed computation.
 
 ## Case 1
 
-User leaves for 30 minutes.
-
-Browser remains open.
+User leaves for 1 hour, app and Colab remain open.
 
 Result:
 
--   Download still available.
--   Transcript preserved.
+-   Download still available (and even auto-download).
+-   Colab may disconnected.
+-   But transcript preserved on app.
 
 ------------------------------------------------------------------------
 
 ## Case 2
-
-Laptop sleeps after 10 minutes.
-
-### Job not finished
-
-Browser sleeps.
-
-Worker continues.
-
-If Colab later disconnects:
-
-Progress remains.
-
-### Job finished
-
-Browser reconnects.
-
-Download still works.
-
-------------------------------------------------------------------------
-
-## Case 3
 
 Multiple users
 
@@ -685,34 +542,27 @@ french-transcript-web/
 
 ------------------------------------------------------------------------
 
-# Future Improvements
-
-## Optional Features
-
--   Queue position display.
--   Remaining time estimation.
--   Multiple GPU workers.
--   Kaggle worker support.
--   Auto retry after worker failure.
--   Drag multiple files.
--   Export DOCX.
--   Subtitle generation (SRT).
--   Speaker diarization.
--   French grammar cleanup.
+> **Production-oriented Design Specification (v2.0)**
 
 ------------------------------------------------------------------------
 
-# Design Principles
+# Updates
 
-The architecture intentionally favors **ephemeral infrastructure**.
+## Batched GPU Inference
 
-Instead of persisting everything forever, it guarantees that:
+Replaced sequential Whisper inference with batched inference (batch_size=4 on Colab GPU).
+Reduced GPU idle time between inference calls.
 
--   active jobs survive browser interruptions,
--   completed files remain available for a defined TTL,
--   users can resume failed jobs without repeating completed work,
--   the backend remains stateless and inexpensive.
+## Removed Temporary WAV I/O
 
-This makes the application well-suited for free-tier deployment while
-still providing a user experience much closer to a production web
-service than a traditional Colab notebook.
+Eliminated intermediate segment_x.wav file creation. Removed repeated disk write/read operations for every segment.
+
+## Optimized GPU Memory Management
+
+Removed torch.cuda.empty_cache() after every segment.
+Allowed PyTorch's CUDA memory allocator to reuse cached memory between batches, reducing allocation overhead.
+
+## Upgraded to Distilled Whisper Model
+Reduced decoder size while maintaining comparable transcription quality.
+Enabled higher inference throughput with lower GPU memory usage.
+Distilled models reduces hallucination.
