@@ -45,7 +45,7 @@ print(f"Connecting to Server: {SERVER_URL} for Job: {JOB_ID}")
 # 1. Load Whisper Large v3 French on GPU
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-model_id = "bofenghuang/whisper-large-v3-french"
+model_id = "bofenghuang/whisper-large-v3-french-distil-dec16"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
