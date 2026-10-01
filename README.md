@@ -1,8 +1,8 @@
 # French Transcript Web App v1 -- User Guide
 
-> V2 migration is in progress. The Vercel/serverless skeleton and legacy run
-> commands are documented in `docs/milestone-1-vercel-skeleton.md`; the audit of
-> this V1 behavior is in `docs/milestone-0-audit.md`.
+> V2 migration through Milestone 4 is documented in `docs/milestones-2-4.md`.
+> The legacy V1 workflow remains available with `npm run dev:legacy` and
+> `/?legacy=1` for regression checks.
 
 Link: https://french-transcript.onrender.com/
 
