@@ -1,5 +1,9 @@
 # French Transcript Web App v1 -- User Guide
 
+> V2 migration is in progress. The Vercel/serverless skeleton and legacy run
+> commands are documented in `docs/milestone-1-vercel-skeleton.md`; the audit of
+> this V1 behavior is in `docs/milestone-0-audit.md`.
+
 Link: https://french-transcript.onrender.com/
 
 ## Basic Usage
