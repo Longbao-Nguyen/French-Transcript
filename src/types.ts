@@ -28,11 +28,15 @@ export const ACTIVE_JOB_STATUSES = [
   'CREATED',
   'UPLOADING',
   'QUEUED',
+  'PROCESSING',
   'WORKER_STARTING',
   'PREPROCESSING',
   'TRANSCRIBING',
   'FINALIZING',
+  'CANCEL_REQUESTED',
 ] as const;
+
+export type QueueState = 'IDLE' | 'RUNNING' | 'PAUSING' | 'PAUSED';
 
 export type ActiveJobStatus = (typeof ACTIVE_JOB_STATUSES)[number];
 export type JobStatus = ActiveJobStatus

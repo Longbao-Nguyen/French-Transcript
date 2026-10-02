@@ -29,7 +29,7 @@ export const POST = route(async (request) => {
       status: 'FAILED_UPLOAD',
       errorCode: 'UPLOAD_SIZE_MISMATCH',
       errorMessage: 'Uploaded object size did not match the selected file.',
-    });
+    }, 'UPLOADING');
     throw new HttpError(409, 'Uploaded file size did not match.', 'UPLOAD_SIZE_MISMATCH');
   }
 
@@ -40,7 +40,7 @@ export const POST = route(async (request) => {
     uploadCompletedAt: new Date(),
     errorCode: null,
     errorMessage: null,
-  });
-  if (!queued) throw new HttpError(404, 'Job not found.', 'JOB_NOT_FOUND');
+  }, 'UPLOADING');
+  if (!queued) throw new HttpError(409, 'This upload has changed state.', 'INVALID_JOB_STATE');
   return jsonResponse({ job: toClientJob(queued) });
 });

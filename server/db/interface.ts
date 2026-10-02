@@ -2,10 +2,12 @@ export const JOB_STATUSES = [
   'CREATED',
   'UPLOADING',
   'QUEUED',
+  'PROCESSING',
   'WORKER_STARTING',
   'PREPROCESSING',
   'TRANSCRIBING',
   'FINALIZING',
+  'CANCEL_REQUESTED',
   'COMPLETED',
   'FAILED_UPLOAD',
   'FAILED_WORKER_START',
@@ -17,15 +19,19 @@ export const JOB_STATUSES = [
 ] as const;
 
 export type JobStatus = (typeof JOB_STATUSES)[number];
+export type QueueState = 'IDLE' | 'RUNNING' | 'PAUSING' | 'PAUSED';
+export interface CancellationResult { job: Job; queueState: QueueState; }
 
 export const ACTIVE_JOB_STATUSES: readonly JobStatus[] = [
   'CREATED',
   'UPLOADING',
   'QUEUED',
+  'PROCESSING',
   'WORKER_STARTING',
   'PREPROCESSING',
   'TRANSCRIBING',
   'FINALIZING',
+  'CANCEL_REQUESTED',
 ];
 
 export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = [
@@ -135,8 +141,16 @@ export interface JobRepository {
   create(input: NewJob): Promise<Job>;
   getByIdForUser(jobId: string, userId: string): Promise<Job | null>;
   listForUser(userId: string, options?: ListJobOptions): Promise<Job[]>;
-  updateForUser(jobId: string, userId: string, patch: JobPatch): Promise<Job | null>;
+  updateForUser(jobId: string, userId: string, patch: JobPatch, expectedStatus?: JobStatus): Promise<Job | null>;
   claimNextQueuedJob(userId: string, workerRunId: string): Promise<Job | null>;
+  cancelForUser(jobId: string, userId: string): Promise<CancellationResult | null>;
+  acknowledgeCancellation(jobId: string, userId: string, workerRunId: string): Promise<CancellationResult | null>;
+  completeForWorker(jobId: string, userId: string, workerRunId: string, outputObjectKey: string): Promise<Job | null>;
+}
+
+export interface QueueRepository {
+  getStateForUser(userId: string): Promise<QueueState>;
+  countQueuedForUser(userId: string): Promise<number>;
 }
 
 export interface WorkerRepository {
@@ -152,6 +166,7 @@ export interface UserSettingsRepository {
 export interface Repositories {
   users: UserRepository;
   jobs: JobRepository;
+  queue: QueueRepository;
   workers: WorkerRepository;
   settings: UserSettingsRepository;
 }

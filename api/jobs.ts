@@ -7,5 +7,9 @@ export const GET = route(async (request) => {
   const user = await requireUser(request);
   const repositories = await getRepositories();
   const jobs = await repositories.jobs.listForUser(user.id, { activeAndRecent: true, limit: 100 });
-  return jsonResponse({ jobs: jobs.map(toClientJob) });
+  const [queueState, queuedCount] = await Promise.all([
+    repositories.queue.getStateForUser(user.id),
+    repositories.queue.countQueuedForUser(user.id),
+  ]);
+  return jsonResponse({ jobs: jobs.map(toClientJob), queueState, queuedCount });
 });

@@ -3,10 +3,13 @@ import type { Sql } from 'postgres';
 import { createId } from '../../ids.js';
 import type {
   Job,
+  CancellationResult,
   JobPatch,
   JobRepository,
   ListJobOptions,
   NewJob,
+  QueueRepository,
+  QueueState,
   Repositories,
   UpsertGoogleUserInput,
   User,
@@ -138,7 +141,7 @@ class PostgresJobRepository implements JobRepository {
           select * from jobs
           where user_id = ${userId}
             and (
-              status in ('CREATED', 'UPLOADING', 'QUEUED', 'WORKER_STARTING', 'PREPROCESSING', 'TRANSCRIBING', 'FINALIZING')
+              status in ('CREATED', 'UPLOADING', 'QUEUED', 'PROCESSING', 'WORKER_STARTING', 'PREPROCESSING', 'TRANSCRIBING', 'FINALIZING', 'CANCEL_REQUESTED')
               or created_at >= now() - interval '7 days'
             )
           order by created_at desc
@@ -147,23 +150,24 @@ class PostgresJobRepository implements JobRepository {
     return rows.map((row) => mapJob(row as Row));
   }
 
-  async updateForUser(jobId: string, userId: string, patch: JobPatch): Promise<Job | null> {
+  async updateForUser(jobId: string, userId: string, patch: JobPatch, expectedStatus?: Job['status']): Promise<Job | null> {
     const entries = Object.entries(patch).filter(([, value]) => value !== undefined) as [keyof JobPatch, unknown][];
     if (entries.length === 0) return this.getByIdForUser(jobId, userId);
 
     const update = Object.fromEntries(entries.map(([key, value]) => [PATCH_COLUMNS[key], value]));
     update.updated_at = new Date();
 
-    const rows = await this.sql`
-      update jobs set ${this.sql(update)}
-      where id = ${jobId} and user_id = ${userId}
-      returning *
-    `;
+    const rows = expectedStatus
+      ? await this.sql`update jobs set ${this.sql(update)} where id = ${jobId} and user_id = ${userId} and status = ${expectedStatus} returning *`
+      : await this.sql`update jobs set ${this.sql(update)} where id = ${jobId} and user_id = ${userId} returning *`;
     return rows[0] ? mapJob(rows[0] as Row) : null;
   }
 
   async claimNextQueuedJob(userId: string, workerRunId: string): Promise<Job | null> {
     return this.sql.begin(async (transaction) => {
+      await transaction`insert into user_queue_state (user_id) values (${userId}) on conflict do nothing`;
+      const queue = await transaction`select state from user_queue_state where user_id = ${userId} for update`;
+      if (queue[0]?.state !== 'RUNNING') return null;
       const rows = await transaction`
         update jobs set
           status = 'PREPROCESSING',
@@ -181,6 +185,75 @@ class PostgresJobRepository implements JobRepository {
       `;
       return rows[0] ? mapJob(rows[0] as Row) : null;
     });
+  }
+
+  async cancelForUser(jobId: string, userId: string): Promise<CancellationResult | null> {
+    return this.sql.begin(async (transaction) => {
+      await transaction`insert into user_queue_state (user_id) values (${userId}) on conflict do nothing`;
+      const queueRows = await transaction`select state from user_queue_state where user_id = ${userId} for update`;
+      const rows = await transaction`select * from jobs where id = ${jobId} and user_id = ${userId} for update`;
+      if (!rows[0]) return null;
+      const job = mapJob(rows[0] as Row);
+      const queueState = queueRows[0].state as QueueState;
+      if (job.status === 'CANCELLED' || job.status === 'CANCEL_REQUESTED') return { job, queueState };
+      if (job.status === 'QUEUED') {
+        const updated = await transaction`update jobs set status = 'CANCELLED', completed_at = now(), updated_at = now() where id = ${jobId} returning *`;
+        return { job: mapJob(updated[0] as Row), queueState };
+      }
+      if (['PROCESSING', 'WORKER_STARTING', 'PREPROCESSING', 'TRANSCRIBING', 'FINALIZING'].includes(job.status)) {
+        if (queueState !== 'RUNNING') throw new Error('Active job has no running queue.');
+        const updated = await transaction`update jobs set status = 'CANCEL_REQUESTED', updated_at = now() where id = ${jobId} returning *`;
+        await transaction`update user_queue_state set state = 'PAUSING', updated_at = now() where user_id = ${userId}`;
+        return { job: mapJob(updated[0] as Row), queueState: 'PAUSING' };
+      }
+      return { job, queueState };
+    });
+  }
+
+  async acknowledgeCancellation(jobId: string, userId: string, workerRunId: string): Promise<CancellationResult | null> {
+    return this.sql.begin(async (transaction) => {
+      const queueRows = await transaction`select state from user_queue_state where user_id = ${userId} for update`;
+      const rows = await transaction`select * from jobs where id = ${jobId} and user_id = ${userId} for update`;
+      if (!rows[0]) return null;
+      const job = mapJob(rows[0] as Row);
+      const queueState = (queueRows[0]?.state ?? 'IDLE') as QueueState;
+      if (job.workerRunId !== workerRunId || !workerRunId) return { job, queueState };
+      if (job.status === 'CANCEL_REQUESTED' && queueState === 'PAUSING') {
+        const updated = await transaction`update jobs set status = 'CANCELLED', completed_at = now(), updated_at = now() where id = ${jobId} returning *`;
+        await transaction`update user_queue_state set state = 'PAUSED', updated_at = now() where user_id = ${userId}`;
+        return { job: mapJob(updated[0] as Row), queueState: 'PAUSED' };
+      }
+      return { job, queueState };
+    });
+  }
+
+  async completeForWorker(jobId: string, userId: string, workerRunId: string, outputObjectKey: string): Promise<Job | null> {
+    return this.sql.begin(async (transaction) => {
+      const queueRows = await transaction`select state from user_queue_state where user_id = ${userId} for update`;
+      if (queueRows[0]?.state !== 'RUNNING') return null;
+      const rows = await transaction`
+        update jobs set status = 'COMPLETED', output_object_key = ${outputObjectKey},
+          progress = 1, completed_at = now(), updated_at = now()
+        where id = ${jobId} and user_id = ${userId} and worker_run_id = ${workerRunId}
+          and status = 'FINALIZING'
+        returning *
+      `;
+      return rows[0] ? mapJob(rows[0] as Row) : null;
+    });
+  }
+}
+
+class PostgresQueueRepository implements QueueRepository {
+  constructor(private readonly sql: Sql) {}
+
+  async getStateForUser(userId: string): Promise<QueueState> {
+    const rows = await this.sql`select state from user_queue_state where user_id = ${userId}`;
+    return (rows[0]?.state ?? 'IDLE') as QueueState;
+  }
+
+  async countQueuedForUser(userId: string): Promise<number> {
+    const rows = await this.sql`select count(*)::int as count from jobs where user_id = ${userId} and status = 'QUEUED'`;
+    return Number(rows[0].count);
   }
 }
 
@@ -261,6 +334,7 @@ export function createPostgresRepositories(sql = getPostgresClient()): Repositor
   return {
     users: new PostgresUserRepository(sql),
     jobs: new PostgresJobRepository(sql),
+    queue: new PostgresQueueRepository(sql),
     workers: new PostgresWorkerRepository(sql),
     settings: new PostgresUserSettingsRepository(sql),
   };
