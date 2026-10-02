@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { loadMigrations, migrationChecksum } from '../../scripts/migrate';
+import { shouldMigrateDuringBuild } from '../../scripts/migrate-deploy';
 
 test('Milestones 2-4 migrations create only the tables used by the implemented app', async () => {
   const migrations = await loadMigrations();
@@ -24,4 +25,10 @@ test('database migrations have stable versions and checksums', async () => {
     assert.match(migration.checksum, /^[a-f0-9]{64}$/);
   }
   assert.equal(migrationChecksum('select 1;\r\n'), migrationChecksum('select 1;\n'));
+});
+
+test('deployment migration runs only for the production target', () => {
+  assert.equal(shouldMigrateDuringBuild('production'), true);
+  assert.equal(shouldMigrateDuringBuild('preview'), false);
+  assert.equal(shouldMigrateDuringBuild(undefined), false);
 });

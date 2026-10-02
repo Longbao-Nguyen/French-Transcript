@@ -12,6 +12,9 @@ Implemented on 2026-10-02. Milestone 3 was migrated from Cloudflare R2 to Vercel
 - Apply the ordered SQL migrations before the first sign-in. The migration runner uses one
   transaction, a PostgreSQL advisory lock, and checksums recorded in `schema_migrations`, so it
   can be run repeatedly and will not reapply or silently modify an existing migration.
+- The Vercel production build runs `npm run db:migrate:deploy` before bundling the app. Vercel
+  provides its configured `DATABASE_URL` during the build, including Sensitive Environment
+  Variables. A failed migration fails the deployment. Preview and local builds skip this step.
 
 For local development, pull the linked development environment and migrate:
 
@@ -20,14 +23,18 @@ vercel env pull .env.local --environment=development --yes
 npm run db:migrate
 ```
 
-For the production database, copy its PostgreSQL connection string from the Neon dashboard into
-the Git-ignored `.env.production.local` file as `DATABASE_URL`. Vercel marks this value as a
-Sensitive Environment Variable, so `vercel env pull` and `vercel env run` return a `[SENSITIVE]`
-placeholder instead of the secret. Then run this exact command from the repository root:
+Production deployments run migrations automatically during the Vercel build. To run a migration
+manually from this repository, copy the production PostgreSQL connection string from the Neon
+dashboard into the Git-ignored `.env.production.local` file as `DATABASE_URL`. Vercel marks this
+value as a Sensitive Environment Variable, so `vercel env pull` and `vercel env run` return a
+`[SENSITIVE]` placeholder instead of the secret. Then run:
 
 ```powershell
 npm run db:migrate -- --env-file=.env.production.local
 ```
+
+Redeploying the updated code runs the migration in Vercel's production build using the project's
+existing `DATABASE_URL`.
 
 The environment files are ignored by Git and must never be committed. Migration `001_initial.sql`
 creates only `users` (Google identity) and `jobs` (durable uploads/queue), which are required by
