@@ -1,8 +1,8 @@
-import { requireUser } from '../../server/auth/session';
-import { getRepositories } from '../../server/db';
-import { HttpError, jsonResponse, readJson, route } from '../../server/http/responses';
-import { getObjectStorage } from '../../server/storage';
-import { createDirectUploadGrant, getRequestedUploadJobId } from '../../server/uploads/direct-upload';
+import { requireUser } from '../../server/auth/session.js';
+import { getRepositories } from '../../server/db/index.js';
+import { HttpError, jsonResponse, readJson, route } from '../../server/http/responses.js';
+import { getObjectStorage } from '../../server/storage/index.js';
+import { createDirectUploadGrant, getRequestedUploadJobId } from '../../server/uploads/direct-upload.js';
 
 export const POST = route(async (request) => {
   const body = await readJson<unknown>(request);

@@ -1,7 +1,7 @@
-import { requireUser } from '../server/auth/session';
-import { getRepositories } from '../server/db';
-import { jsonResponse, route } from '../server/http/responses';
-import { toClientJob } from '../server/jobs/public';
+import { requireUser } from '../server/auth/session.js';
+import { getRepositories } from '../server/db/index.js';
+import { jsonResponse, route } from '../server/http/responses.js';
+import { toClientJob } from '../server/jobs/public.js';
 
 export const GET = route(async (request) => {
   const user = await requireUser(request);

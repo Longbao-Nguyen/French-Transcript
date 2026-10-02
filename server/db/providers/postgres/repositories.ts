@@ -1,6 +1,6 @@
 import type { Sql } from 'postgres';
 
-import { createId } from '../../ids';
+import { createId } from '../../ids.js';
 import type {
   Job,
   JobPatch,
@@ -15,8 +15,8 @@ import type {
   UserSettingsRepository,
   WorkerRepository,
   WorkerState,
-} from '../../interface';
-import { getPostgresClient } from './client';
+} from '../../interface.js';
+import { getPostgresClient } from './client.js';
 
 type Row = Record<string, unknown>;
 

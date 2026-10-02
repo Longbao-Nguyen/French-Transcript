@@ -1,5 +1,5 @@
-import type { ObjectStorage } from './interface';
-import { VercelBlobStorage } from './providers/vercel-blob';
+import type { ObjectStorage } from './interface.js';
+import { VercelBlobStorage } from './providers/vercel-blob.js';
 
 let storage: ObjectStorage | undefined;
 

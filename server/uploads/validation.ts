@@ -1,4 +1,4 @@
-import { HttpError } from '../http/responses';
+import { HttpError } from '../http/responses.js';
 
 export interface UploadInitInput {
   filename: string;

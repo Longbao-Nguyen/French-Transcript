@@ -1,11 +1,11 @@
-import { requireUser } from '../../server/auth/session';
-import { getRepositories } from '../../server/db';
-import { createId } from '../../server/db/ids';
-import { HttpError, jsonResponse, readJson, route } from '../../server/http/responses';
-import { assertJobTransition } from '../../server/jobs/state';
-import { getObjectStorage } from '../../server/storage';
-import { createSourceObjectPathname } from '../../server/storage/pathnames';
-import { validateUploadInit } from '../../server/uploads/validation';
+import { requireUser } from '../../server/auth/session.js';
+import { getRepositories } from '../../server/db/index.js';
+import { createId } from '../../server/db/ids.js';
+import { HttpError, jsonResponse, readJson, route } from '../../server/http/responses.js';
+import { assertJobTransition } from '../../server/jobs/state.js';
+import { getObjectStorage } from '../../server/storage/index.js';
+import { createSourceObjectPathname } from '../../server/storage/pathnames.js';
+import { validateUploadInit } from '../../server/uploads/validation.js';
 
 export const POST = route(async (request) => {
   const user = await requireUser(request);

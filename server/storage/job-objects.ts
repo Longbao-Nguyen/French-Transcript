@@ -1,6 +1,6 @@
-import type { Job } from '../db/interface';
-import { getObjectStorage } from './index';
-import type { ObjectStorage } from './interface';
+import type { Job } from '../db/interface.js';
+import { getObjectStorage } from './index.js';
+import type { ObjectStorage } from './interface.js';
 
 export async function deleteSourceMedia(
   job: Pick<Job, 'sourceObjectKey'>,

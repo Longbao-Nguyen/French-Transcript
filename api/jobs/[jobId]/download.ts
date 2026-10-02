@@ -1,8 +1,8 @@
-import { requireUser } from '../../../server/auth/session';
-import { getRepositories } from '../../../server/db';
-import { HttpError, extractPathId, route } from '../../../server/http/responses';
-import { attachmentContentDisposition, createTranscriptDownloadFilename } from '../../../server/storage/downloads';
-import { getObjectStorage } from '../../../server/storage';
+import { requireUser } from '../../../server/auth/session.js';
+import { getRepositories } from '../../../server/db/index.js';
+import { HttpError, extractPathId, route } from '../../../server/http/responses.js';
+import { attachmentContentDisposition, createTranscriptDownloadFilename } from '../../../server/storage/downloads.js';
+import { getObjectStorage } from '../../../server/storage/index.js';
 
 export const GET = route(async (request) => {
   const user = await requireUser(request);

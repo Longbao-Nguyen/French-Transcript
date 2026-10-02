@@ -1,5 +1,5 @@
-import type { JobStatus } from '../db/interface';
-import { HttpError } from '../http/responses';
+import type { JobStatus } from '../db/interface.js';
+import { HttpError } from '../http/responses.js';
 
 const transitions: Record<JobStatus, readonly JobStatus[]> = {
   CREATED: ['UPLOADING', 'FAILED_UPLOAD', 'CANCELLED'],

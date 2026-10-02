@@ -1,8 +1,8 @@
 import { getToken } from '@auth/core/jwt';
 
-import { getRepositories } from '../db';
-import type { User } from '../db/interface';
-import { HttpError } from '../http/responses';
+import { getRepositories } from '../db/index.js';
+import type { User } from '../db/interface.js';
+import { HttpError } from '../http/responses.js';
 
 export async function requireUser(request: Request): Promise<User> {
   const secret = process.env.AUTH_SECRET;

@@ -1,6 +1,6 @@
-import type { Job } from '../db/interface';
-import { HttpError } from '../http/responses';
-import type { DirectUploadGrant, DirectUploadRequest } from '../storage/interface';
+import type { Job } from '../db/interface.js';
+import { HttpError } from '../http/responses.js';
+import type { DirectUploadGrant, DirectUploadRequest } from '../storage/interface.js';
 
 const CLIENT_UPLOAD_TOKEN_TTL_MS = 60 * 60 * 1000;
 

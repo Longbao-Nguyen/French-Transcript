@@ -1,7 +1,7 @@
 import { Auth, type AuthConfig } from '@auth/core';
 import Google, { type GoogleProfile } from '@auth/core/providers/google';
 
-import { getRepositories } from '../db';
+import { getRepositories } from '../db/index.js';
 
 function required(name: 'AUTH_SECRET' | 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'): string {
   const value = process.env[name];

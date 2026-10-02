@@ -13,7 +13,7 @@ import type {
   ObjectStorage,
   PrivateStoredObject,
   StoredObjectMetadata,
-} from '../interface';
+} from '../interface.js';
 
 function getStoreId(): string {
   const storeId = process.env.BLOB_STORE_ID;

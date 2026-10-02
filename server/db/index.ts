@@ -1,4 +1,4 @@
-import type { Repositories } from './interface';
+import type { Repositories } from './interface.js';
 
 let repositoriesPromise: Promise<Repositories> | undefined;
 
@@ -13,7 +13,7 @@ async function createRepositories(): Promise<Repositories> {
   const provider = process.env.DB_PROVIDER || 'postgres';
 
   if (provider === 'postgres') {
-    const { createPostgresRepositories } = await import('./providers/postgres/repositories');
+    const { createPostgresRepositories } = await import('./providers/postgres/repositories.js');
     return createPostgresRepositories();
   }
 

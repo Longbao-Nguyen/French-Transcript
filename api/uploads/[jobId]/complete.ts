@@ -1,9 +1,9 @@
-import { requireUser } from '../../../server/auth/session';
-import { getRepositories } from '../../../server/db';
-import { HttpError, extractPathId, jsonResponse, route } from '../../../server/http/responses';
-import { toClientJob } from '../../../server/jobs/public';
-import { assertJobTransition } from '../../../server/jobs/state';
-import { getObjectStorage } from '../../../server/storage';
+import { requireUser } from '../../../server/auth/session.js';
+import { getRepositories } from '../../../server/db/index.js';
+import { HttpError, extractPathId, jsonResponse, route } from '../../../server/http/responses.js';
+import { toClientJob } from '../../../server/jobs/public.js';
+import { assertJobTransition } from '../../../server/jobs/state.js';
+import { getObjectStorage } from '../../../server/storage/index.js';
 
 export const POST = route(async (request) => {
   const user = await requireUser(request);

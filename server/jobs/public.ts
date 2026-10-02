@@ -1,4 +1,4 @@
-import type { Job, JobStatus } from '../db/interface';
+import type { Job, JobStatus } from '../db/interface.js';
 
 export interface ClientJob {
   id: string;
