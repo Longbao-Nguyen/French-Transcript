@@ -9,7 +9,31 @@ Implemented on 2026-10-02. Milestone 3 was migrated from Cloudflare R2 to Vercel
 - `server/db/interface.ts` defines provider-neutral user, job, worker, and settings repositories.
 - PostgreSQL/Neon remains the durable job database and its adapter remains under `server/db/providers/postgres/`.
 - Existing database columns `source_object_key` and `output_object_key` now contain provider-neutral storage pathnames. No PostgreSQL provider or schema change is required.
-- Run `npm run db:migrate` after setting `DATABASE_URL`.
+- Apply the ordered SQL migrations before the first sign-in. The migration runner uses one
+  transaction, a PostgreSQL advisory lock, and checksums recorded in `schema_migrations`, so it
+  can be run repeatedly and will not reapply or silently modify an existing migration.
+
+For local development, pull the linked development environment and migrate:
+
+```powershell
+vercel env pull .env.local --environment=development --yes
+npm run db:migrate
+```
+
+For the production database, copy its PostgreSQL connection string from the Neon dashboard into
+the Git-ignored `.env.production.local` file as `DATABASE_URL`. Vercel marks this value as a
+Sensitive Environment Variable, so `vercel env pull` and `vercel env run` return a `[SENSITIVE]`
+placeholder instead of the secret. Then run this exact command from the repository root:
+
+```powershell
+npm run db:migrate -- --env-file=.env.production.local
+```
+
+The environment files are ignored by Git and must never be committed. Migration `001_initial.sql`
+creates only `users` (Google identity) and `jobs` (durable uploads/queue), which are required by
+Milestones 2–4. `worker_runs` and `kaggle_connections` are deferred until the Kaggle worker
+milestones; `user_settings` is deferred until a settings API/UI exists. The nullable
+`jobs.worker_run_id` column is reserved for that later migration and currently has no foreign key.
 
 Google's authorized redirect URI must be:
 
