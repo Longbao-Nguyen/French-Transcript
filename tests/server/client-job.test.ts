@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { Job } from '../../server/db/interface';
 import { toClientJob } from '../../server/jobs/public';
 
-test('client job contract does not expose ownership or R2 object keys', () => {
+test('client job contract does not expose ownership or storage pathnames', () => {
   const now = new Date('2026-10-02T00:00:00.000Z');
   const job: Job = {
     id: 'job_1',

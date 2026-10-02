@@ -3,7 +3,7 @@ import { getRepositories } from '../../../server/db';
 import { HttpError, extractPathId, jsonResponse, route } from '../../../server/http/responses';
 import { toClientJob } from '../../../server/jobs/public';
 import { assertJobTransition } from '../../../server/jobs/state';
-import { headObject } from '../../../server/r2/client';
+import { getObjectStorage } from '../../../server/storage';
 
 export const POST = route(async (request) => {
   const user = await requireUser(request);
@@ -19,11 +19,11 @@ export const POST = route(async (request) => {
     throw new HttpError(409, 'This upload cannot be completed in its current state.', 'INVALID_JOB_STATE');
   }
 
-  const object = await headObject(job.sourceObjectKey);
+  const object = await getObjectStorage().headObject(job.sourceObjectKey);
   if (!object) {
     throw new HttpError(409, 'The uploaded object was not found.', 'UPLOAD_NOT_FOUND');
   }
-  if (Number(object.ContentLength) !== job.fileSizeBytes) {
+  if (object.pathname !== job.sourceObjectKey || object.size !== job.fileSizeBytes) {
     assertJobTransition(job.status, 'FAILED_UPLOAD');
     await repositories.jobs.updateForUser(job.id, user.id, {
       status: 'FAILED_UPLOAD',

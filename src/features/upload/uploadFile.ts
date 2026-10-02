@@ -1,4 +1,5 @@
 import type { ClientJob } from '../../types';
+import { uploadPrivateMedia } from './vercelBlobClient';
 
 interface UploadCallbacks {
   onInitialized(jobId: string): void;
@@ -15,24 +16,6 @@ async function responseError(response: Response): Promise<Error> {
   }
 }
 
-function putWithProgress(url: string, file: File, onProgress: (value: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open('PUT', url);
-    request.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-    request.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.min(event.loaded / event.total, 1));
-    };
-    request.onload = () => {
-      if (request.status >= 200 && request.status < 300) resolve();
-      else reject(new Error(`Object upload failed with status ${request.status}.`));
-    };
-    request.onerror = () => reject(new Error('Object upload failed. Check the R2 CORS configuration.'));
-    request.onabort = () => reject(new Error('Upload was cancelled.'));
-    request.send(file);
-  });
-}
-
 export async function uploadFileDirectly(file: File, callbacks: UploadCallbacks): Promise<ClientJob> {
   const contentType = file.type || 'application/octet-stream';
   const initResponse = await fetch('/api/uploads/init', {
@@ -42,11 +25,17 @@ export async function uploadFileDirectly(file: File, callbacks: UploadCallbacks)
     body: JSON.stringify({ filename: file.name, size: file.size, contentType }),
   });
   if (!initResponse.ok) throw await responseError(initResponse);
-  const init = await initResponse.json() as { jobId: string; uploadUrl: string };
+  const init = await initResponse.json() as { jobId: string; uploadPathname: string };
   callbacks.onInitialized(init.jobId);
 
   try {
-    await putWithProgress(init.uploadUrl, file, callbacks.onProgress);
+    await uploadPrivateMedia({
+      jobId: init.jobId,
+      pathname: init.uploadPathname,
+      file,
+      contentType,
+      onProgress: callbacks.onProgress,
+    });
     callbacks.onFinalizing();
 
     const completeResponse = await fetch(`/api/uploads/${encodeURIComponent(init.jobId)}/complete`, {

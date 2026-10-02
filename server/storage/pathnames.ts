@@ -9,10 +9,10 @@ function safeObjectName(filename: string): string {
   return normalized || 'media';
 }
 
-export function createSourceObjectKey(userId: string, jobId: string, filename: string): string {
+export function createSourceObjectPathname(userId: string, jobId: string, filename: string): string {
   return `users/${userId}/jobs/${jobId}/source/${safeObjectName(filename)}`;
 }
 
-export function createOutputObjectKey(userId: string, jobId: string): string {
+export function createOutputObjectPathname(userId: string, jobId: string): string {
   return `users/${userId}/jobs/${jobId}/output/transcript.txt`;
 }

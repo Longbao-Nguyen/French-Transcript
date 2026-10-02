@@ -22,8 +22,15 @@ export function CompletedJobs({ jobs }: { jobs: ClientJob[] }) {
       setDownloadError(payload?.error?.message || 'Could not prepare this download.');
       return;
     }
-    const { downloadUrl } = await response.json() as { downloadUrl: string };
-    window.location.assign(downloadUrl);
+    const transcript = await response.blob();
+    const downloadUrl = URL.createObjectURL(transcript);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `${job.filename.replace(/\.[^.]+$/, '') || 'transcript'}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
   };
 
   return (
